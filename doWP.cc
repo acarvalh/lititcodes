@@ -70,11 +70,11 @@ void runfits(const Float_t mass=120, Int_t mode=1, Bool_t dobands = false)
   RooWorkspace *wAll = new RooWorkspace("w_all","w_all");
   RooWorkspace* wAll = hlfB.GetWs(); // Get the RooWorkspace containing the models and variables 
   bool dobands=false;
-  AddBkgData(wAll,ddata,fileBkgName,dobands);
+//  AddBkgData(wAll,ddata,fileBkgName,dobands);
   //
 
-  MakeDataCard(wall,wAll,fileBaseName,fileBkgName);
-  MakeDataCardoneCat(wall,wAll,fileBaseName,fileBkgName);
+//  MakeDataCard(wall,wAll,fileBaseName,fileBkgName);
+//  MakeDataCardoneCat(wall,wAll,fileBaseName,fileBkgName);
   cout<< "here"<<endl;
   return;
 } // close runfits
@@ -163,33 +163,59 @@ void AddSigData(RooWorkspace* wall, Float_t mass, TString signalfile, const char
 	);
     SetConstantParams(wall->set(TString::Format("SigPdfParam_cat%d",c)));
   } // close for ncat
+  // copy in annother WS before to save
+  RooAbsPdf* mggSigPdfTosave[ncat];
+  RooWorkspace *wAllSave = new RooWorkspace("w_all","w_all");
+  for (int c = 0; c < ncat; ++c) {
+    // import pdfs from previous fit calculation
+    mggSigPdfTosave[c] = (RooAbsPdf*)  wall->pdf(TString::Format("mtotSig_cat%d",c)); 
+    // import datasets from previous fit calculation
+    wAllSave->import(*wall->pdf(TString::Format("mtotSig_cat%d",c))); 
+  }
   // (2) Systematics on energy scale and resolution
   // 1,1,1 statistical to be treated on the datacard
-  wall->factory("CMS_hgg_sig_m0_absShift[1,1,1]"); 
+  wAllSave->factory("CMS_hgg_sig_m0_absShift[1,1,1]"); 
   //
-  wall->factory("prod::CMS_hgg_sig_m0_cat0(mtot_sig_m0_cat0, CMS_hgg_sig_m0_absShift)");
-  wall->factory("prod::CMS_hgg_sig_m0_cat1(mtot_sig_m0_cat1, CMS_hgg_sig_m0_absShift)");
+  wAllSave->factory("prod::CMS_hgg_sig_m0_cat0(mtot_sig_m0_cat0, CMS_hgg_sig_m0_absShift)");
+  wAllSave->factory("prod::CMS_hgg_sig_m0_cat1(mtot_sig_m0_cat1, CMS_hgg_sig_m0_absShift)");
   // (3) Systematics on resolution
   // 1,1,1 statistical to be treated on the datacard
-  wall->factory("CMS_hgg_sig_sigmaScale[1,1,1]");
+  wAllSave->factory("CMS_hgg_sig_sigmaScale[1,1,1]");
   //
-  wall->factory("prod::CMS_hgg_sig_sigma_cat0(mtot_sig_sigma_cat0, CMS_hgg_sig_sigmaScale)");
-  wall->factory("prod::CMS_hgg_sig_sigma_cat1(mtot_sig_sigma_cat1, CMS_hgg_sig_sigmaScale)");
+  wAllSave->factory("prod::CMS_hgg_sig_sigma_cat0(mtot_sig_sigma_cat0, CMS_hgg_sig_sigmaScale)");
+  wAllSave->factory("prod::CMS_hgg_sig_sigma_cat1(mtot_sig_sigma_cat1, CMS_hgg_sig_sigmaScale)");
   //
-  wall->factory("prod::CMS_hgg_sig_gsigma_cat0(mtot_sig_gsigma_cat0, CMS_hgg_sig_sigmaScale)");
-  wall->factory("prod::CMS_hgg_sig_gsigma_cat1(mtot_sig_gsigma_cat1, CMS_hgg_sig_sigmaScale)");
-  // (4) do reparametrization of signal
-  for (int c = 0; c < ncat; ++c) wall->factory(
-		  TString::Format("EDIT::CMS_hgg_sig_cat%d(mtotSig_cat%d,",c,c) +
-		  TString::Format(" mtot_sig_m0_cat%d=CMS_hgg_sig_m0_cat%d, ", c,c) +
-		  TString::Format(" mtot_sig_sigma_cat%d=CMS_hgg_sig_sigma_cat%d, ", c,c) +
-		  TString::Format(" mtot_sig_gsigma_cat%d=CMS_hgg_sig_gsigma_cat%d)", c,c)
-  );
+  wAllSave->factory("prod::CMS_hgg_sig_gsigma_cat0(mtot_sig_gsigma_cat0, CMS_hgg_sig_sigmaScale)");
+  wAllSave->factory("prod::CMS_hgg_sig_gsigma_cat1(mtot_sig_gsigma_cat1, CMS_hgg_sig_sigmaScale)");
+  for (int c = 0; c < ncat; ++c) {
+    wAllSave->factory(
+	TString::Format("CMS_hgg_sig_alpha_cat%d[%g,0.5,5]", 
+	c, wall->var(TString::Format("mtot_sig_alpha_cat%d",c))->getVal()));
+  
+    wAllSave->factory(
+	TString::Format("CMS_hgg_sig_n_cat%d[%g,0.5,20]", 
+	c, wall->var(TString::Format("mtot_sig_n_cat%d",c))->getVal()));
+  
+    wAllSave->factory(
+	TString::Format("CMS_hgg_sig_frac_cat%d[%g,0.0,1.0]", 
+	c, wall->var(TString::Format("mtot_sig_frac_cat%d",c))->getVal()));
+  }
 
+  // (4) do reparametrization of signal
+  // parameters that are not re-calculated should not be savev
+  for (int c = 0; c < ncat; ++c) wAllSave->factory(
+		  TString::Format("EDIT::CMS_hgg_sig_cat%d(mtotSig_cat%d,",c,c) +
+		  TString::Format("mtot_sig_m0_cat%d=CMS_hgg_sig_m0_cat%d, ", c,c) +
+		  TString::Format("mtot_sig_sigma_cat%d=CMS_hgg_sig_sigma_cat%d, ", c,c) +
+		  TString::Format("mtot_sig_alpha_cat%d=CMS_hgg_sig_alpha_cat%d, ", c,c) +
+		  TString::Format("mtot_sig_n_cat%d=CMS_hgg_sig_n_cat%d, ", c,c) +
+		  TString::Format("mtot_sig_frac_cat%d=CMS_hgg_sig_frac_cat%d, ", c,c) +
+		  TString::Format("mtot_sig_gsigma_cat%d=CMS_hgg_sig_gsigma_cat%d)", c,c)
+  );
   //
   // save to a file
   TString filename(TString(fileBasename)+".inputsig.root");
-  wall->writeToFile(filename);
+  wAllSave->writeToFile(filename);
   cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
   cout << "Write signal workspace in: " << filename << " file" << endl;
   //wall->Print();
@@ -592,10 +618,10 @@ void MakeDataCard(RooWorkspace* wall, RooWorkspace* wAll, const char* fileBaseNa
   outFile << "shapes mtotBkg   cat0 " << TString(fileBkgName)+".root" << " w_all:CMS_hgg_bkg_8TeV_cat0" << endl;
   outFile << "shapes mtotBkg   cat1 "<<  TString(fileBkgName)+".root" << " w_all:CMS_hgg_bkg_8TeV_cat1" << endl;
   outFile << "# signal" << endl;
-  outFile << "shapes mtotSig cat0 " << TString(fileBaseName)+".inputsig.root" << " w_allS_ws:mtotSig_cat0" << endl;
-  outFile << "shapes mtotSig cat1 " << TString(fileBaseName)+".inputsig.root" << " w_allS_ws:mtotSig_cat1" << endl;
-  outFile << "#shapes mtotSig cat0 " << TString(fileBaseName)+".inputsig.root" << " w_all:CMS_hgg_sig_cat0" << endl;
-  outFile << "#shapes mtotSig cat1 " << TString(fileBaseName)+".inputsig.root" << " w_all:CMS_hgg_sig_cat1" << endl;
+  outFile << "#shapes mtotSig cat0 " << TString(fileBaseName)+".inputsig.root" << " w_allS_ws:mtotSig_cat0" << endl;
+  outFile << "#shapes mtotSig cat1 " << TString(fileBaseName)+".inputsig.root" << " w_allS_ws:mtotSig_cat1" << endl;
+  outFile << "shapes mtotSig cat0 " << TString(fileBaseName)+".inputsig.root" << " w_all:CMS_hgg_sig_cat0" << endl;
+  outFile << "shapes mtotSig cat1 " << TString(fileBaseName)+".inputsig.root" << " w_all:CMS_hgg_sig_cat1" << endl;
   outFile << "---------------" << endl;
   /////////////////////////////////////
   // begin declaration
@@ -851,4 +877,3 @@ void style(){
     defaultStyle->cd();
   return;
 }
-
