@@ -315,7 +315,7 @@ void AddBkgData(RooWorkspace* wAll, TString datafile, const char* fileBaseName, 
   //wAll->import(dataBinned);
     // unbinned dataset only
     // combine understand data as data_obs
-  wAll->import(*dataToFit[c],Rename(TString::Format("data_obs_cat%d",c)));
+  wAll->import(*dataToFit[c],Rename(TString::Format("Data_cat%d",c)));
     //wAll->import(*dataToPlot[c],Rename(TString::Format("Dataplot_cat%d",c)));
   }
   for (int c = 0; c < ncat; ++c) {
@@ -328,7 +328,7 @@ void AddBkgData(RooWorkspace* wAll, TString datafile, const char* fileBaseName, 
   cout << "======================================================================" << endl;
   data.Print("v");
   for (int c = 0; c < ncat; ++c) {
-    std::cout << "  " << wAll->data(TString::Format("data_obs_cat%d",c))->sumEntries();
+    std::cout << "  " << wAll->data(TString::Format("Data_cat%d",c))->sumEntries();
   }
   // we adeed signal
   ///////////////////////////////////////////////////////////////////////////
@@ -346,17 +346,19 @@ void AddBkgData(RooWorkspace* wAll, TString datafile, const char* fileBaseName, 
   for (int c = 0; c < ncat; ++c) {
     RooFormulaVar *p1mod = new RooFormulaVar(
 	TString::Format("p1mod_cat%d",c),"","@0",*wAll->var(TString::Format("CMS_mtot_bkg_8TeV_slope1_cat%d",c)));
-    //RooFormulaVar *p2mod = new RooFormulaVar(
-	//TString::Format("p2mod_cat%d",c),"","@0",*wAll->var(TString::Format("mtot_bkg_8TeV_slope2_cat%d",c)));
+    RooFormulaVar *p2mod = new RooFormulaVar(
+	TString::Format("p2mod_cat%d",c),"","@0",*wAll->var(TString::Format("CMS_mtot_bkg_8TeV_slope2_cat%d",c)));
     // define pdf
+
     RooAbsPdf* mtotBkgTmp0 = new RooGenericPdf(  // if exp function
 		TString::Format("DijetBackground_cat%d",c), 
-//		"exp(-@0/(@1*@1 + @2*@2*@0))", 
-		"exp(-@0/(@1*@1))", 
-//		RooArgList(*mtot, *p1mod, *p2mod));
-		RooArgList(*mtot, *p1mod));
+		"exp(-@0/(@1*@1 + @2*@2*@0))", 
+//		"exp(-@0/(@1*@1))", 
+		RooArgList(*mtot, *p1mod, *p2mod));
+//		RooArgList(*mtot, *p1mod));
     cout<<"here 6 "<< c<<endl;
     // the normalization variable
+    wAll->factory(TString::Format("CMS_mtot_bkg_8TeV_cat%d_norm[1.0,0.0,10000.0]",c));
   //  wAll->factory(TString::Format("mtot_bkg_8TeV_norm_cat%d[1.0,0.0,50000]",c));
     // we copy the pdf to normalize
     RooExtendPdf mtotBkgTmp( 
@@ -376,7 +378,7 @@ void AddBkgData(RooWorkspace* wAll, TString datafile, const char* fileBaseName, 
     // we plot
   TCanvas* ctmp = new TCanvas("ctmp","mtot Background Categories",0,0,501,501);
   plotmtotBkg[c] = mtot->frame(nBinsMass);  
-  dataToFit[c]   = (RooDataSet*) wAll->data(TString::Format("data_obs_cat%d",c));
+  dataToFit[c]   = (RooDataSet*) wAll->data(TString::Format("Data_cat%d",c));
   dataToFit[c]->plotOn(plotmtotBkg[c],LineColor(kWhite),MarkerColor(kWhite));  
   mtotBkgTmp.plotOn(
 	plotmtotBkg[c],
@@ -461,37 +463,53 @@ void AddBkgData(RooWorkspace* wAll, TString datafile, const char* fileBaseName, 
   cout<<"here 3 "<< c<<endl;
 
 } // close to each category
-/*  // (1) import everything functions / depends on quantity of parameters... change it if change the function!
+
+  // create WS before to save it
+  RooAbsPdf* mggBkgPdfTosave[ncat];
+  RooWorkspace *wAllSave = new RooWorkspace("w_all","w_all");
+  RooDataSet* datatosave[ncat];
   for (int c = 0; c < ncat; ++c) {
-    wAll->factory(
-	TString::Format("CMS_hgg_bkg_8TeV_cat%d_norm[%g,0.0,500.0]", 
-	c, wAll->var(TString::Format("mtot_bkg_8TeV_norm_cat%d",c))->getVal())); // what is this 1* slope?
-    wAll->factory(
-	TString::Format("CMS_hgg_bkg_8TeV_slope1_cat%d[%g,0.0,500]", 
-	c, wAll->var(TString::Format("mtot_bkg_8TeV_slope1_cat%d",c))->getVal()));
-    wAll->factory(
-	TString::Format("CMS_hgg_bkg_8TeV_slope2_cat%d[%g,0.0,100]", 
-	c, wAll->var(TString::Format("mtot_bkg_8TeV_slope2_cat%d",c))->getVal()));
+    // import pdfs from previous fit calculation
+    //mggBkgPdfTosave[c] = (RooAbsPdf*)  wAll->pdf(TString::Format("mtotBkg_cat%d",c)); 
+    // import datasets from previous fit calculation
+    wAllSave->import(*wAll->pdf(TString::Format("mtotBkg_cat%d",c))); 
+    // import observed
+    //wAllSave->import(*wAll->pdf(TString::Format("data_obs_cat%d",c))); 
+    datatosave[c] = (RooDataSet*) wAll->data(TString::Format("Data_cat%d",c));
+    wAllSave->import(*datatosave[c], Rename(TString::Format("data_obs_cat%d",c)));
+  }
+  //
+  // (1) import everything functions / depends on quantity of parameters... change it if change the function!
+  for (int c = 0; c < ncat; ++c) {
+    wAllSave->factory(
+	TString::Format("CMS_hgg_bkg_8TeV_cat%d_norm[%g,0.0,10000.0]", 
+	c, wAll->var(TString::Format("CMS_mtot_bkg_8TeV_cat%d_norm",c))->getVal())); // what is this 1* slope?
+    wAllSave->factory(
+	TString::Format("CMS_hgg_bkg_8TeV_slope1_cat%d[%g,-1000,1000]", 
+	c, wAll->var(TString::Format("CMS_mtot_bkg_8TeV_slope1_cat%d",c))->getVal()));
+    wAllSave->factory(
+	TString::Format("CMS_hgg_bkg_8TeV_slope2_cat%d[%g,-1000,1000]", 
+	c, wAll->var(TString::Format("CMS_mtot_bkg_8TeV_slope2_cat%d",c))->getVal()));
   }
   // (2) do reparametrization of background
   for (int c = 0; c < ncat; ++c){ 
-    wAll->factory(
+    wAllSave->factory(
 	TString::Format("EDIT::CMS_hgg_bkg_8TeV_cat%d(mtotBkg_cat%d,",c,c) +
-	TString::Format(" mtot_bkg_8TeV_norm_cat%d=CMS_hgg_bkg_8TeV_cat%d_norm,", c,c)+
-	TString::Format(" mtot_bkg_8TeV_slope1_cat%d=CMS_hgg_bkg_8TeV_slope1_cat%d,", c,c)+
-	TString::Format(" mtot_bkg_8TeV_slope2_cat%d=CMS_hgg_bkg_8TeV_slope2_cat%d)", c,c)
+	TString::Format(" CMS_mtot_bkg_8TeV_cat%d_norm=CMS_hgg_bkg_8TeV_cat%d_norm,", c,c)+
+	TString::Format(" CMS_mtot_bkg_8TeV_slope1_cat%d=CMS_hgg_bkg_8TeV_slope1_cat%d,", c,c)
+	+TString::Format(" CMS_mtot_bkg_8TeV_slope2_cat%d=CMS_hgg_bkg_8TeV_slope2_cat%d)", c,c)
   	);
   } // close for cat
-*/
+
   // import also observed
   //
   TString filename(TString(fileBaseName)+".root");
-  wAll->writeToFile(filename);
+  wAllSave->writeToFile(filename);
   cout << "Write background workspace in: " << filename << " file" << endl;
   // import data to workspace
   std::cout << "observation ";
   for (int c = 0; c < ncat; ++c) {
-    std::cout << "  " << wAll->data(TString::Format("data_obs_cat%d",c))->sumEntries();
+    std::cout << "  " << wAllSave->data(TString::Format("data_obs_cat%d",c))->sumEntries();
   }
   std::cout << std::endl;
   // we finish fitting, 
@@ -536,7 +554,7 @@ void MakeDataCard(RooWorkspace* wall, RooWorkspace* wAll, const char* fileBaseNa
   RooDataSet* sigToFit[ncat];
   cout << "======== Start datacard maker =====================" << endl; 
   for (int c = 0; c < ncat; ++c) {
-    Data[c]        = (RooDataSet*) wAll->data(TString::Format("data_obs_cat%d",c));
+    Data[c]        = (RooDataSet*) wAll->data(TString::Format("Data_cat%d",c));
     sigToFit[c]    = (RooDataSet*) wall->data(TString::Format("Sig_cat%d",c));
   }
 
@@ -565,14 +583,19 @@ void MakeDataCard(RooWorkspace* wall, RooWorkspace* wAll, const char* fileBaseNa
   outFile << "kmax *" << endl;
   outFile << "---------------" << endl;
   cout<<"here"<<endl;
+  outFile << "# the name after w_all is the name of the rooextpdf we want to use, we have both saved" << endl;
   outFile << "# BKG" << endl;
-  outFile << "shapes data_obs  cat0 " << TString(fileBkgName)+".root" << " w_allB_ws:data_obs_cat0" << endl;
-  outFile << "shapes data_obs  cat1 "<<  TString(fileBkgName)+".root" << " w_allB_ws:data_obs_cat1" << endl;
-  outFile << "shapes mtotBkg   cat0 " << TString(fileBkgName)+".root" << " w_allB_ws:mtotBkg_cat0" << endl;
-  outFile << "shapes mtotBkg   cat1 "<<  TString(fileBkgName)+".root" << " w_allB_ws:mtotBkg_cat1" << endl;
+  outFile << "shapes data_obs  cat0 " << TString(fileBkgName)+".root" << " w_all:data_obs_cat0" << endl;
+  outFile << "shapes data_obs  cat1 "<<  TString(fileBkgName)+".root" << " w_all:data_obs_cat1" << endl;
+  outFile << "#shapes mtotBkg   cat0 " << TString(fileBkgName)+".root" << " w_all:mtotBkg_cat0" << endl;
+  outFile << "#shapes mtotBkg   cat1 "<<  TString(fileBkgName)+".root" << " w_all:mtotBkg_cat1" << endl;
+  outFile << "shapes mtotBkg   cat0 " << TString(fileBkgName)+".root" << " w_all:CMS_hgg_bkg_8TeV_cat0" << endl;
+  outFile << "shapes mtotBkg   cat1 "<<  TString(fileBkgName)+".root" << " w_all:CMS_hgg_bkg_8TeV_cat1" << endl;
   outFile << "# signal" << endl;
   outFile << "shapes mtotSig cat0 " << TString(fileBaseName)+".inputsig.root" << " w_allS_ws:mtotSig_cat0" << endl;
   outFile << "shapes mtotSig cat1 " << TString(fileBaseName)+".inputsig.root" << " w_allS_ws:mtotSig_cat1" << endl;
+  outFile << "#shapes mtotSig cat0 " << TString(fileBaseName)+".inputsig.root" << " w_all:CMS_hgg_sig_cat0" << endl;
+  outFile << "#shapes mtotSig cat1 " << TString(fileBaseName)+".inputsig.root" << " w_all:CMS_hgg_sig_cat1" << endl;
   outFile << "---------------" << endl;
   /////////////////////////////////////
   // begin declaration
@@ -620,14 +643,18 @@ void MakeDataCard(RooWorkspace* wall, RooWorkspace* wAll, const char* fileBaseNa
   outFile << "CMS_hgg_sig_m0_absShift    param   1   0.006   # displacement of the dipho mean" << endl;
   outFile << "CMS_hgg_sig_sigmaScale     param   1   0.11   # optimistic estimative of resolution uncertainty  " << endl;
   outFile << "############## for mtot fit - slopes" << endl;
-  outFile << "CMS_mtot_bkg_8TeV_norm_cat0           flatParam  # Normalization uncertainty on background slope" << endl;
-  outFile << "CMS_mtot_bkg_8TeV_norm_cat1           flatParam  # Normalization uncertainty on background slope" << endl;
+  outFile << "#CMS_mtot_bkg_8TeV_norm_cat0           flatParam  # Normalization uncertainty on background slope" << endl;
+  outFile << "#CMS_mtot_bkg_8TeV_norm_cat1           flatParam  # Normalization uncertainty on background slope" << endl;
+  outFile << "#CMS_mtot_bkg_8TeV_slope1_cat0         flatParam  # Mean and absolute uncertainty on background slope" << endl;
+  outFile << "#CMS_mtot_bkg_8TeV_slope1_cat1         flatParam  # Mean and absolute uncertainty on background slope" << endl;
 
-  outFile << "CMS_mtot_bkg_8TeV_slope1_cat0         flatParam  # Mean and absolute uncertainty on background slope" << endl;
-  outFile << "CMS_mtot_bkg_8TeV_slope1_cat1         flatParam  # Mean and absolute uncertainty on background slope" << endl;
+  outFile << "CMS_hgg_bkg_8TeV_cat0_norm           flatParam  # Normalization uncertainty on background slope" << endl;
+  outFile << "CMS_hgg_bkg_8TeV_cat1_norm           flatParam  # Normalization uncertainty on background slope" << endl;
 
-  //outFile << "mtot_bkg_8TeV_slope2_cat0         flatParam  # Mean and absolute uncertainty on background slope" << endl;
-  //outFile << "mtot_bkg_8TeV_slope2_cat1         flatParam  # Mean and absolute uncertainty on background slope" << endl;
+  outFile << "CMS_hgg_bkg_8TeV_slope1_cat0         flatParam  # Mean and absolute uncertainty on background slope" << endl;
+  outFile << "CMS_hgg_bkg_8TeV_slope1_cat1         flatParam  # Mean and absolute uncertainty on background slope" << endl;
+  outFile << "CMS_hgg_bkg_8TeV_slope2_cat0         flatParam  # Mean and absolute uncertainty on background slope" << endl;
+  outFile << "CMS_hgg_bkg_8TeV_slope2_cat1         flatParam  # Mean and absolute uncertainty on background slope" << endl;
 
   /////////////////////////////////////
 
@@ -654,7 +681,7 @@ void MakeDataCardoneCat(RooWorkspace* wall, RooWorkspace* wAll, const char* file
   RooDataSet* sigToFit[ncat];
   cout << "======== Start datacard maker =====================" << endl; 
   for (int c = 0; c < ncat; ++c) {
-    Data[c]        = (RooDataSet*) wAll->data(TString::Format("data_obs_cat%d",c));
+    Data[c]        = (RooDataSet*) wAll->data(TString::Format("Data_cat%d",c));
     sigToFit[c]    = (RooDataSet*) wall->data(TString::Format("Sig_cat%d",c));
   }
 
